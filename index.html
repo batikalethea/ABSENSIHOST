@@ -1,0 +1,831 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Live Tracker Host | Sistem Pencatat Sesi Live</title>
+    
+    <!-- Google Fonts: Plus Jakarta Sans -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    
+    <!-- Tailwind CSS (CDN) -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: { sans: ['"Plus Jakarta Sans"', 'sans-serif'] },
+                    colors: {
+                        glass: 'rgba(255, 255, 255, 0.1)',
+                        glassBorder: 'rgba(255, 255, 255, 0.2)',
+                    }
+                }
+            }
+        }
+    </script>
+
+    <!-- FontAwesome (CDN) -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+
+    <style>
+        /* Custom Scrollbar for sleek UI */
+        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.2); border-radius: 10px; }
+        
+        /* Glassmorphism utility classes */
+        .glass-panel {
+            background: rgba(30, 41, 59, 0.7); /* slate-800 with opacity */
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            border: 1px solid rgba(255, 255, 255, 0.15);
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+        }
+
+        .input-glass {
+            background: rgba(15, 23, 42, 0.6);
+            border: 1px solid rgba(255,255,255,0.1);
+            color: white;
+            transition: all 0.3s ease;
+        }
+        .input-glass:focus {
+            outline: none;
+            border-color: #8b5cf6; /* violet-500 */
+            box-shadow: 0 0 0 2px rgba(139, 92, 246, 0.2);
+        }
+
+        /* Prevent zooming on input focus in iOS */
+        input[type="text"], input[type="number"], input[type="password"], select, textarea {
+            font-size: 16px;
+        }
+
+        /* Pulse animation for Live Timer */
+        @keyframes pulse-ring {
+            0% { transform: scale(0.8); box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.7); }
+            70% { transform: scale(1); box-shadow: 0 0 0 15px rgba(16, 185, 129, 0); }
+            100% { transform: scale(0.8); box-shadow: 0 0 0 0 rgba(16, 185, 129, 0); }
+        }
+        .live-indicator {
+            animation: pulse-ring 2s infinite;
+        }
+    </style>
+</head>
+<body class="bg-gradient-to-br from-slate-900 to-violet-950 text-white min-h-screen overflow-x-hidden selection:bg-violet-500/30">
+
+    <!-- Global Loading Overlay -->
+    <div id="loading-overlay" class="fixed inset-0 z-50 flex flex-col items-center justify-center bg-slate-900/80 backdrop-blur-sm hidden">
+        <div class="animate-spin rounded-full h-16 w-16 border-t-4 border-b-4 border-violet-500 mb-4"></div>
+        <p id="loading-text" class="text-violet-200 font-medium">Memproses data...</p>
+    </div>
+
+    <!-- Toast Notification Container -->
+    <div id="toast-container" class="fixed top-4 left-1/2 transform -translate-x-1/2 z-50 flex flex-col gap-2 w-[90%] max-w-md pointer-events-none"></div>
+
+    <!-- Upload Progress Overlay (Loading Bar Popup) -->
+    <div id="upload-progress-overlay" class="fixed inset-0 z-[60] flex flex-col items-center justify-center bg-slate-900/90 backdrop-blur-sm hidden transition-opacity duration-300 opacity-0">
+        <div class="w-4/5 max-w-sm bg-slate-800 border border-slate-700 rounded-3xl p-7 shadow-2xl flex flex-col items-center text-center">
+            <i class="fa-solid fa-cloud-arrow-up text-5xl text-violet-500 mb-4 animate-bounce"></i>
+            <h3 class="text-white font-bold text-xl mb-1">Mengirim Laporan</h3>
+            <p id="upload-progress-text" class="text-slate-400 text-sm mb-6">Menyiapkan data...</p>
+
+            <!-- Progress Bar Container -->
+            <div class="w-full bg-slate-950 rounded-full h-4 mb-3 overflow-hidden border border-slate-700 shadow-inner">
+                <div id="upload-progress-bar" class="bg-gradient-to-r from-violet-600 to-indigo-500 h-4 rounded-full transition-all duration-300 ease-out relative" style="width: 0%">
+                    <div class="absolute top-0 left-0 w-full h-full bg-white/20 animate-pulse"></div>
+                </div>
+            </div>
+            <p id="upload-percent" class="text-violet-400 font-extrabold text-2xl tabular-nums">0%</p>
+        </div>
+    </div>
+
+    <!-- Main Mobile Container -->
+    <main class="w-full max-w-md mx-auto min-h-screen relative p-4 flex flex-col">
+        
+        <!-- 1. VIEW: LANDING PAGE -->
+        <section id="view-landing" class="flex-1 flex flex-col items-center justify-center space-y-8 animate-[fadeIn_0.5s_ease-out]">
+            <div class="text-center space-y-2">
+                <div class="w-24 h-24 mx-auto bg-gradient-to-tr from-violet-600 to-indigo-500 rounded-2xl flex items-center justify-center shadow-lg shadow-violet-500/30 mb-6 transform rotate-3">
+                    <i class="fa-solid fa-video text-4xl text-white -rotate-3"></i>
+                </div>
+                <h1 class="text-3xl font-extrabold tracking-tight">Live Tracker</h1>
+                <p class="text-slate-400 text-sm">Sistem Pencatat Sesi Host Live</p>
+            </div>
+
+            <div class="w-full space-y-4">
+                <button onclick="prepareHostLogin()" class="w-full bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-500 hover:to-indigo-500 text-white font-bold py-4 rounded-xl shadow-lg shadow-violet-600/20 transition transform active:scale-95 flex items-center justify-center gap-3">
+                    <i class="fa-solid fa-user-headset"></i> Login Host Live
+                </button>
+                <button onclick="switchView('view-admin-login')" class="w-full bg-glass border border-glassBorder hover:bg-white/20 text-white font-semibold py-4 rounded-xl shadow-lg transition transform active:scale-95 flex items-center justify-center gap-3">
+                    <i class="fa-solid fa-shield-halved"></i> Login Admin
+                </button>
+            </div>
+        </section>
+
+        <!-- 2. VIEW: ADMIN LOGIN -->
+        <section id="view-admin-login" class="hidden flex-1 flex flex-col justify-center animate-[fadeIn_0.3s_ease-out]">
+            <button onclick="switchView('view-landing')" class="absolute top-6 left-4 text-slate-400 hover:text-white p-2">
+                <i class="fa-solid fa-arrow-left text-xl"></i>
+            </button>
+            <div class="glass-panel rounded-2xl p-8 space-y-6">
+                <div class="text-center">
+                    <div class="w-16 h-16 mx-auto bg-rose-500/20 text-rose-400 rounded-full flex items-center justify-center mb-4">
+                        <i class="fa-solid fa-lock text-2xl"></i>
+                    </div>
+                    <h2 class="text-2xl font-bold">Otorisasi Admin</h2>
+                    <p class="text-sm text-slate-400 mt-1">Masukkan PIN 6 Digit</p>
+                </div>
+                <input type="password" id="admin-pin" placeholder="••••••" maxlength="6" class="w-full input-glass rounded-xl px-4 py-4 text-center text-2xl tracking-widest font-mono" inputmode="numeric">
+                <button onclick="loginAdmin()" class="w-full bg-gradient-to-r from-rose-600 to-red-600 hover:from-rose-500 hover:to-red-500 font-bold py-4 rounded-xl shadow-lg transition active:scale-95">
+                    Masuk Dashboard
+                </button>
+            </div>
+        </section>
+
+        <!-- 3. VIEW: ADMIN DASHBOARD -->
+        <section id="view-admin-dashboard" class="hidden flex-1 flex flex-col py-4 animate-[fadeIn_0.3s_ease-out]">
+            <div class="flex justify-between items-center mb-6">
+                <div>
+                    <h2 class="text-xl font-bold text-rose-400">Admin Panel</h2>
+                    <p class="text-xs text-slate-400">Kelola Data Host</p>
+                </div>
+                <button onclick="logoutAdmin()" class="bg-white/10 hover:bg-white/20 px-3 py-2 rounded-lg text-sm transition">
+                    <i class="fa-solid fa-right-from-bracket mr-1"></i> Keluar
+                </button>
+            </div>
+
+            <div class="glass-panel rounded-2xl p-5 mb-6">
+                <h3 class="font-bold border-b border-white/10 pb-2 mb-4 flex items-center gap-2">
+                    <i class="fa-solid fa-user-plus text-violet-400"></i> Tambah Host Baru
+                </h3>
+                <form id="form-add-host" class="space-y-3" onsubmit="event.preventDefault(); submitNewHost();">
+                    <input type="text" id="add-nama" placeholder="Nama Lengkap" required class="w-full input-glass rounded-lg px-3 py-2 text-sm">
+                    <input type="text" id="add-wa" placeholder="Nomor WhatsApp" required class="w-full input-glass rounded-lg px-3 py-2 text-sm" inputmode="tel">
+                    <div class="flex gap-3">
+                        <input type="text" id="add-user" placeholder="Username" required class="w-1/2 input-glass rounded-lg px-3 py-2 text-sm">
+                        <input type="text" id="add-pass" placeholder="Password" required class="w-1/2 input-glass rounded-lg px-3 py-2 text-sm">
+                    </div>
+                    <div class="flex gap-3">
+                        <input type="date" id="add-dob" required class="w-1/2 input-glass rounded-lg px-3 py-2 text-sm text-slate-300">
+                        <input type="text" id="add-bank" placeholder="Rekening Bank (Misal: BCA 123...)" required class="w-1/2 input-glass rounded-lg px-3 py-2 text-sm">
+                    </div>
+                    <textarea id="add-alamat" placeholder="Alamat Lengkap" required rows="2" class="w-full input-glass rounded-lg px-3 py-2 text-sm"></textarea>
+                    
+                    <button type="submit" class="w-full bg-violet-600 hover:bg-violet-500 font-semibold py-2.5 rounded-lg transition active:scale-95 text-sm mt-2">
+                        Simpan Host ke Database
+                    </button>
+                </form>
+            </div>
+
+            <div class="glass-panel rounded-2xl p-5 flex-1 flex flex-col">
+                <div class="flex justify-between items-center mb-4 border-b border-white/10 pb-2">
+                    <h3 class="font-bold flex items-center gap-2">
+                        <i class="fa-solid fa-users text-emerald-400"></i> Daftar Host
+                    </h3>
+                    <button onclick="loadAdminHosts()" class="text-slate-400 hover:text-white transition">
+                        <i class="fa-solid fa-rotate-right"></i>
+                    </button>
+                </div>
+                <div id="admin-host-list" class="space-y-2 overflow-y-auto max-h-[300px] flex-1">
+                    <p class="text-center text-slate-500 text-sm mt-4">Klik refresh untuk memuat data.</p>
+                </div>
+            </div>
+        </section>
+
+        <!-- 4. VIEW: HOST LOGIN -->
+        <section id="view-host-login" class="hidden flex-1 flex flex-col justify-center animate-[fadeIn_0.3s_ease-out]">
+            <button onclick="switchView('view-landing')" class="absolute top-6 left-4 text-slate-400 hover:text-white p-2">
+                <i class="fa-solid fa-arrow-left text-xl"></i>
+            </button>
+            <div class="glass-panel rounded-2xl p-8 space-y-6 relative overflow-hidden">
+                <div class="absolute -top-10 -right-10 w-32 h-32 bg-violet-600/30 rounded-full blur-2xl"></div>
+                
+                <div class="text-center relative z-10">
+                    <div class="w-16 h-16 mx-auto bg-violet-500/20 text-violet-400 rounded-full flex items-center justify-center mb-4">
+                        <i class="fa-solid fa-headset text-2xl"></i>
+                    </div>
+                    <h2 class="text-2xl font-bold">Login Host</h2>
+                    <p class="text-sm text-slate-400 mt-1">Pilih akun Anda untuk mulai sesi</p>
+                </div>
+                
+                <div class="space-y-4 relative z-10">
+                    <div class="relative">
+                        <select id="login-host-username" class="w-full input-glass rounded-xl px-4 py-3 appearance-none text-white font-medium cursor-pointer">
+                            <option value="" disabled selected>Pilih Username Host...</option>
+                        </select>
+                        <i class="fa-solid fa-chevron-down absolute right-4 top-1/2 transform -translate-y-1/2 text-slate-400 pointer-events-none"></i>
+                    </div>
+                    <input type="text" id="login-host-password" placeholder="Password" class="w-full input-glass rounded-xl px-4 py-3">
+                    <button onclick="loginHost()" class="w-full bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-500 font-bold py-3.5 rounded-xl shadow-lg transition active:scale-95">
+                        Masuk
+                    </button>
+                </div>
+            </div>
+        </section>
+
+        <!-- 5. VIEW: HOST DASHBOARD -->
+        <section id="view-host-dashboard" class="hidden flex-1 flex flex-col animate-[fadeIn_0.3s_ease-out] pb-20">
+            <!-- Header Profile -->
+            <div class="glass-panel rounded-2xl p-4 mb-6 flex items-center justify-between">
+                <div class="flex items-center gap-3">
+                    <div class="w-12 h-12 rounded-full bg-gradient-to-br from-violet-500 to-fuchsia-500 flex items-center justify-center shadow-inner">
+                        <i class="fa-solid fa-user text-white"></i>
+                    </div>
+                    <div>
+                        <h2 id="dash-host-name" class="font-bold text-lg leading-tight">Nama Host</h2>
+                        <p id="dash-host-bank" class="text-xs text-slate-400"><i class="fa-solid fa-building-columns mr-1"></i> BCA</p>
+                    </div>
+                </div>
+                <button onclick="logoutHost()" class="w-10 h-10 rounded-full bg-white/5 hover:bg-rose-500/20 hover:text-rose-400 flex items-center justify-center transition text-slate-400">
+                    <i class="fa-solid fa-power-off"></i>
+                </button>
+            </div>
+
+            <!-- Timer & Status Center -->
+            <div class="flex-1 flex flex-col items-center justify-center mb-8 relative">
+                <!-- Status Badge -->
+                <div id="live-status-badge" class="absolute top-0 px-4 py-1.5 rounded-full bg-slate-800 border border-slate-700 text-xs font-semibold tracking-wider text-slate-400 transition-colors duration-300">
+                    <span class="mr-2 inline-block w-2 h-2 rounded-full bg-slate-500" id="live-dot"></span>
+                    <span id="live-status-text">OFFLINE</span>
+                </div>
+
+                <!-- Timer Display -->
+                <div class="text-center mt-12 mb-10">
+                    <h1 id="live-timer-display" class="text-6xl font-black tracking-tighter tabular-nums text-transparent bg-clip-text bg-gradient-to-b from-white to-slate-400 drop-shadow-sm">00:00:00</h1>
+                    <p class="text-slate-500 text-sm mt-2 font-medium">DURASI SESI</p>
+                </div>
+
+                <!-- Big Action Buttons -->
+                <div class="w-full px-4 relative h-32 flex justify-center items-center">
+                    <!-- START BUTTON -->
+                    <button id="btn-start-live" onclick="startLiveSession()" class="absolute w-4/5 h-20 bg-gradient-to-r from-emerald-500 to-teal-500 rounded-2xl shadow-[0_0_40px_rgba(16,185,129,0.3)] border border-emerald-400/50 flex items-center justify-center gap-3 text-xl font-bold transition-all transform active:scale-95 hover:scale-105 z-10">
+                        <i class="fa-solid fa-play text-2xl"></i> MULAI LIVE
+                    </button>
+
+                    <!-- STOP BUTTON -->
+                    <button id="btn-stop-live" onclick="openEndSessionModal()" class="absolute w-4/5 h-20 bg-gradient-to-r from-rose-600 to-red-600 rounded-2xl shadow-[0_0_40px_rgba(225,29,72,0.4)] border border-rose-400/50 flex items-center justify-center gap-3 text-xl font-bold transition-all transform active:scale-95 hover:scale-105 z-0 opacity-0 scale-90 pointer-events-none">
+                        <i class="fa-solid fa-stop text-2xl"></i> SELESAI SESI
+                    </button>
+                </div>
+            </div>
+        </section>
+
+        <!-- 6. MODAL: END SESSION -->
+        <div id="modal-end-session" class="fixed inset-0 z-50 bg-slate-900 flex flex-col transition-transform duration-300 translate-y-full hidden">
+            <div class="flex justify-between items-center p-5 border-b border-white/10 bg-slate-900/80 backdrop-blur-md sticky top-0 z-50 shadow-sm">
+                <div>
+                    <h3 class="font-bold text-xl flex items-center gap-2 text-white"><i class="fa-solid fa-flag-checkered text-rose-500"></i> Laporan Akhir Sesi</h3>
+                    <p class="text-xs text-slate-400 mt-1">Isi performa live stream Anda</p>
+                </div>
+                <button onclick="closeEndSessionModal()" class="w-10 h-10 rounded-full bg-slate-800 text-slate-400 hover:text-white hover:bg-slate-700 flex items-center justify-center transition active:scale-90">
+                    <i class="fa-solid fa-xmark text-xl"></i>
+                </button>
+            </div>
+            
+            <div class="flex-1 overflow-y-auto p-5 pb-32 space-y-6 bg-slate-950">
+                <div class="bg-indigo-900/30 border border-indigo-500/30 rounded-2xl p-4 flex gap-3 text-indigo-200">
+                    <i class="fa-solid fa-circle-info text-xl shrink-0 mt-0.5 text-indigo-400"></i>
+                    <p class="text-sm leading-relaxed">Isi data performa dengan jujur. Lampirkan screenshot dashboard seller (Shopee/TikTok) sebagai bukti validasi ke Admin.</p>
+                </div>
+
+                <!-- Shopee Card -->
+                <div class="bg-gradient-to-br from-slate-900 to-slate-800 border border-orange-500/30 rounded-2xl p-5 shadow-lg relative overflow-hidden">
+                    <div class="absolute top-0 right-0 w-24 h-24 bg-orange-500/10 rounded-bl-full pointer-events-none"></div>
+                    <h4 class="font-bold text-orange-400 mb-4 flex items-center gap-2 text-lg"><i class="fa-solid fa-bag-shopping"></i> SHOPEE</h4>
+                    
+                    <div class="space-y-4 relative z-10">
+                        <div class="bg-slate-900/50 p-3 rounded-xl border border-white/5">
+                            <label class="text-xs font-semibold text-slate-400 uppercase tracking-wider block mb-2">Produk Terjual (Qty)</label>
+                            <input type="number" id="report-shopee-qty" placeholder="0" class="w-full bg-transparent text-white text-2xl font-bold font-mono focus:outline-none placeholder-slate-600" inputmode="numeric">
+                        </div>
+                        <div class="bg-slate-900/50 p-3 rounded-xl border border-white/5 focus-within:border-orange-500/50 transition-colors">
+                            <label class="text-xs font-semibold text-slate-400 uppercase tracking-wider block mb-2">Total Pendapatan (GMV)</label>
+                            <div class="flex items-center">
+                                <span class="text-slate-500 font-bold text-xl mr-2">Rp</span>
+                                <input type="text" id="report-shopee-gmv" placeholder="0" class="w-full bg-transparent text-white text-2xl font-bold font-mono focus:outline-none placeholder-slate-600" oninput="formatRupiahInput(this)" inputmode="numeric">
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- TikTok Card -->
+                <div class="bg-gradient-to-br from-slate-900 to-slate-800 border border-slate-600 rounded-2xl p-5 shadow-lg relative overflow-hidden">
+                    <div class="absolute top-0 right-0 w-24 h-24 bg-white/5 rounded-bl-full pointer-events-none"></div>
+                    <h4 class="font-bold text-white mb-4 flex items-center gap-2 text-lg"><i class="fa-brands fa-tiktok"></i> TIKTOK</h4>
+                    
+                    <div class="space-y-4 relative z-10">
+                        <div class="bg-slate-900/50 p-3 rounded-xl border border-white/5">
+                            <label class="text-xs font-semibold text-slate-400 uppercase tracking-wider block mb-2">Produk Terjual (Qty)</label>
+                            <input type="number" id="report-tiktok-qty" placeholder="0" class="w-full bg-transparent text-white text-2xl font-bold font-mono focus:outline-none placeholder-slate-600" inputmode="numeric">
+                        </div>
+                        <div class="bg-slate-900/50 p-3 rounded-xl border border-white/5 focus-within:border-slate-400 transition-colors">
+                            <label class="text-xs font-semibold text-slate-400 uppercase tracking-wider block mb-2">Total Pendapatan (GMV)</label>
+                            <div class="flex items-center">
+                                <span class="text-slate-500 font-bold text-xl mr-2">Rp</span>
+                                <input type="text" id="report-tiktok-gmv" placeholder="0" class="w-full bg-transparent text-white text-2xl font-bold font-mono focus:outline-none placeholder-slate-600" oninput="formatRupiahInput(this)" inputmode="numeric">
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Bukti Screenshot Card -->
+                <div class="bg-slate-900 border border-slate-700 rounded-2xl p-5 shadow-lg">
+                    <h4 class="font-bold text-slate-200 mb-1 flex items-center gap-2"><i class="fa-solid fa-camera text-violet-400"></i> Bukti Screenshot</h4>
+                    <p class="text-xs text-slate-400 mb-4">Wajib melampirkan screenshot dashboard</p>
+                    
+                    <input type="file" id="report-image" accept="image/*" class="hidden" onchange="previewImage(event)">
+                    
+                    <div id="image-preview-container" class="hidden relative w-full h-48 rounded-xl overflow-hidden border-2 border-violet-500/50 bg-slate-950 shadow-inner group">
+                        <img id="image-preview" class="w-full h-full object-cover" src="" alt="Preview">
+                        <div class="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                             <button onclick="clearImage()" class="bg-rose-600 hover:bg-rose-500 text-white font-bold py-2 px-4 rounded-lg flex items-center gap-2 shadow-lg transform active:scale-95 transition">
+                                 <i class="fa-solid fa-trash"></i> Hapus Foto
+                             </button>
+                        </div>
+                        <button onclick="clearImage()" class="absolute top-2 right-2 w-10 h-10 bg-rose-600/90 backdrop-blur-sm text-white rounded-full flex items-center justify-center shadow-lg active:scale-90 transition md:hidden">
+                            <i class="fa-solid fa-trash"></i>
+                        </button>
+                    </div>
+
+                    <button id="btn-trigger-camera" onclick="document.getElementById('report-image').click()" class="w-full bg-slate-800 hover:bg-slate-700 active:bg-slate-700 border-2 border-dashed border-slate-600 text-slate-300 py-8 rounded-xl flex flex-col items-center justify-center gap-3 transition transform active:scale-[0.98]">
+                        <div class="w-14 h-14 bg-slate-900 rounded-full flex items-center justify-center border border-slate-700 shadow-inner">
+                            <i class="fa-solid fa-image text-2xl text-violet-400"></i>
+                        </div>
+                        <div class="text-center">
+                            <span class="block text-sm font-bold text-white mb-1">Ketuk untuk Upload Foto</span>
+                            <span class="block text-xs text-slate-400">Kamera atau Galeri HP Anda</span>
+                        </div>
+                    </button>
+                </div>
+            </div>
+
+            <div class="p-5 bg-slate-900 border-t border-white/10 pb-8 absolute bottom-0 left-0 w-full z-50">
+                <button onclick="submitSessionReport()" class="w-full bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-500 hover:to-indigo-500 font-extrabold py-4 text-lg rounded-xl shadow-[0_10px_20px_rgba(139,92,246,0.3)] active:scale-[0.98] transition-all flex justify-center items-center gap-3">
+                    <i class="fa-solid fa-paper-plane text-xl"></i> KIRIM & AKHIRI SESI
+                </button>
+            </div>
+        </div>
+
+    </main>
+
+    <!-- SCRIPTS -->
+    <script>
+        const GAS_URL = 'https://script.google.com/macros/s/AKfycbxKc6uKavFOOHlu83AuEDOOmut3iB2v1aVPBG_ld35pRDToggxJMg1k0RtNat1ZG7C1mA/exec';
+        const ADMIN_PIN = "123456";
+
+        let currentUser = null;
+        let currentSession = null;
+        let timerInterval = null;
+        let selectedImageB64 = null;
+        let cachedHosts = [];
+
+        async function fetchFromGas(action, data = {}) {
+            try {
+                const response = await fetch(GAS_URL, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'text/plain;charset=utf-8'
+                    },
+                    body: JSON.stringify({ action: action, data: data })
+                });
+                const result = await response.json();
+                if (result.status === 'error') {
+                    throw new Error(result.message);
+                }
+                return result.data;
+            } catch (error) {
+                console.error('GAS Fetch Error:', error);
+                throw error;
+            }
+        }
+
+        function switchView(viewId) {
+            const views = ['view-landing', 'view-admin-login', 'view-admin-dashboard', 'view-host-login', 'view-host-dashboard'];
+            views.forEach(id => {
+                const el = document.getElementById(id);
+                if (el) el.classList.add('hidden');
+            });
+            const target = document.getElementById(viewId);
+            if (target) target.classList.remove('hidden');
+        }
+
+        function showLoading(text = "Memproses data...") {
+            document.getElementById('loading-text').innerText = text;
+            document.getElementById('loading-overlay').classList.remove('hidden');
+        }
+
+        function hideLoading() {
+            document.getElementById('loading-overlay').classList.add('hidden');
+        }
+
+        function showToast(message, type = 'info') {
+            const container = document.getElementById('toast-container');
+            const toast = document.createElement('div');
+            
+            let bgClass = 'bg-slate-800 border-slate-700 text-white';
+            if (type === 'success') bgClass = 'bg-emerald-900/90 border-emerald-500 text-emerald-100';
+            if (type === 'error') bgClass = 'bg-rose-900/90 border-rose-500 text-rose-100';
+
+            toast.className = `p-4 rounded-xl border ${bgClass} shadow-xl backdrop-blur-md text-sm font-medium transition-all duration-300 transform translate-y-[-10px] opacity-0 pointer-events-auto flex items-center justify-between`;
+            toast.innerHTML = `
+                <span>${message}</span>
+                <button onclick="this.parentElement.remove()" class="ml-3 text-slate-400 hover:text-white">&times;</button>
+            `;
+
+            container.appendChild(toast);
+            
+            setTimeout(() => {
+                toast.classList.remove('translate-y-[-10px]', 'opacity-0');
+            }, 10);
+
+            setTimeout(() => {
+                toast.classList.add('opacity-0');
+                setTimeout(() => toast.remove(), 300);
+            }, 4000);
+        }
+
+        function loginAdmin() {
+            const pin = document.getElementById('admin-pin').value;
+            if (pin === ADMIN_PIN) {
+                document.getElementById('admin-pin').value = '';
+                switchView('view-admin-dashboard');
+                loadAdminHosts();
+            } else {
+                showToast('PIN Admin salah!', 'error');
+            }
+        }
+
+        function logoutAdmin() {
+            switchView('view-landing');
+        }
+
+        async function submitNewHost() {
+            const nama = document.getElementById('add-nama').value.trim();
+            const wa = document.getElementById('add-wa').value.trim();
+            const username = document.getElementById('add-user').value.trim().toLowerCase();
+            const pass = document.getElementById('add-pass').value.trim(); // Ensure no leading/trailing spaces when adding
+            const dob = document.getElementById('add-dob').value;
+            const bank = document.getElementById('add-bank').value.trim();
+            const alamat = document.getElementById('add-alamat').value.trim();
+
+            if (!nama || !wa || !username || !pass || !dob || !bank || !alamat) {
+                showToast('Harap isi semua kolom pendaftaran!', 'error');
+                return;
+            }
+
+            showLoading("Menyimpan host baru ke Spreadsheet...");
+            try {
+                await fetchFromGas('addHost', { nama, wa, username, pass, dob, bank, alamat });
+                showToast('Host berhasil ditambahkan!', 'success');
+                document.getElementById('form-add-host').reset();
+                loadAdminHosts();
+            } catch (err) {
+                showToast('Gagal menyimpan host: ' + err.message, 'error');
+            } finally {
+                hideLoading();
+            }
+        }
+
+        async function loadAdminHosts() {
+            const hostListContainer = document.getElementById('admin-host-list');
+            hostListContainer.innerHTML = '<p class="text-center text-slate-400 text-sm py-4"><i class="fa-solid fa-spinner animate-spin"></i> Memuat data host...</p>';
+            
+            try {
+                const hosts = await fetchFromGas('getHosts');
+                cachedHosts = hosts || [];
+
+                if (cachedHosts.length === 0) {
+                    hostListContainer.innerHTML = '<p class="text-center text-slate-500 text-sm py-4">Belum ada host terdaftar.</p>';
+                    return;
+                }
+
+                hostListContainer.innerHTML = cachedHosts.map(h => `
+                    <div class="p-3 rounded-xl bg-slate-900/60 border border-white/5 flex items-center justify-between mb-2">
+                        <div>
+                            <p class="font-bold text-sm text-white">${h.nama}</p>
+                            <p class="text-xs text-slate-400">@${h.username} • WA: ${h.wa}</p>
+                            <p class="text-xs text-rose-300 mt-1">Pass: ${h.pass}</p>
+                        </div>
+                        <span class="text-xs bg-violet-500/20 text-violet-300 px-2.5 py-1 rounded-full font-mono">${h.bank}</span>
+                    </div>
+                `).join('');
+            } catch (err) {
+                hostListContainer.innerHTML = `<p class="text-center text-rose-400 text-sm py-4">Gagal memuat: ${err.message}</p>`;
+            }
+        }
+
+        async function prepareHostLogin() {
+            showLoading("Memuat daftar akun Host...");
+            try {
+                const hosts = await fetchFromGas('getHosts');
+                cachedHosts = hosts || [];
+                
+                const select = document.getElementById('login-host-username');
+                select.innerHTML = '<option value="" disabled selected>Pilih Username Host...</option>';
+
+                cachedHosts.forEach(h => {
+                    const opt = document.createElement('option');
+                    opt.value = h.username;
+                    opt.textContent = `${h.nama} (@${h.username})`;
+                    select.appendChild(opt);
+                });
+
+                switchView('view-host-login');
+            } catch (err) {
+                showToast('Gagal memuat akun host: ' + err.message, 'error');
+            } finally {
+                hideLoading();
+            }
+        }
+
+        async function loginHost() {
+            const username = document.getElementById('login-host-username').value;
+            // Trim whitespace from input password just in case user added space by accident
+            const pass = document.getElementById('login-host-password').value.trim(); 
+
+            if (!username || !pass) {
+                showToast('Pilih username dan masukkan password!', 'error');
+                return;
+            }
+
+            const host = cachedHosts.find(h => h.username === username);
+            
+            // Console log for debugging, can be removed later
+            console.log("Login Attempt:", {
+                selectedUsername: username,
+                inputPassword: pass,
+                foundHost: host,
+                hostPasswordFromDB: host ? host.pass : 'N/A'
+            });
+
+            if (!host) {
+                 showToast('Username tidak ditemukan!', 'error');
+                 return;
+            }
+
+            // Convert both to strings and trim to ensure exact matching, ignoring potential leading/trailing spaces from Google Sheets or input
+            const expectedPass = String(host.pass).trim();
+            const inputPass = String(pass).trim();
+
+            if (expectedPass !== inputPass) {
+                showToast(`Password salah! Input Anda: '${inputPass}', di DB: '${expectedPass}'`, 'error'); // Temporarily show what's failing in the UI for easy debugging
+                return;
+            }
+
+            currentUser = host;
+            document.getElementById('dash-host-name').textContent = currentUser.nama;
+            document.getElementById('dash-host-bank').innerHTML = `<i class="fa-solid fa-building-columns mr-1"></i> ${currentUser.bank}`;
+            document.getElementById('login-host-password').value = '';
+
+            switchView('view-host-dashboard');
+            await checkActiveSession();
+        }
+
+        function logoutHost() {
+            stopTimer();
+            currentUser = null;
+            currentSession = null;
+            switchView('view-landing');
+            showToast('Berhasil keluar.', 'info');
+        }
+
+        async function checkActiveSession() {
+            if (!currentUser) return;
+
+            showLoading("Memeriksa status sesi aktif...");
+            try {
+                const activeSession = await fetchFromGas('getActiveSession', { username: currentUser.username });
+                if (activeSession && activeSession.sessionId) {
+                    currentSession = activeSession;
+                    setLiveUI(true);
+                    startTimer(new Date(activeSession.waktuMulai));
+                } else {
+                    currentSession = null;
+                    setLiveUI(false);
+                    resetTimerDisplay();
+                }
+            } catch (err) {
+                showToast('Gagal mengecek sesi aktif: ' + err.message, 'error');
+                setLiveUI(false);
+            } finally {
+                hideLoading();
+            }
+        }
+
+        function setLiveUI(isLive) {
+            const badge = document.getElementById('live-status-badge');
+            const dot = document.getElementById('live-dot');
+            const statusText = document.getElementById('live-status-text');
+            const btnStart = document.getElementById('btn-start-live');
+            const btnStop = document.getElementById('btn-stop-live');
+
+            if (isLive) {
+                badge.className = 'absolute top-0 px-4 py-1.5 rounded-full bg-emerald-950/80 border border-emerald-500 text-xs font-semibold tracking-wider text-emerald-400 transition-colors duration-300';
+                dot.className = 'mr-2 inline-block w-2.5 h-2.5 rounded-full bg-emerald-400 live-indicator';
+                statusText.textContent = 'SEDANG LIVE STREAM';
+
+                btnStart.classList.add('opacity-0', 'scale-90', 'pointer-events-none', 'z-0');
+                btnStart.classList.remove('z-10');
+
+                btnStop.classList.remove('opacity-0', 'scale-90', 'pointer-events-none', 'z-0');
+                btnStop.classList.add('z-10');
+            } else {
+                badge.className = 'absolute top-0 px-4 py-1.5 rounded-full bg-slate-800 border border-slate-700 text-xs font-semibold tracking-wider text-slate-400 transition-colors duration-300';
+                dot.className = 'mr-2 inline-block w-2 h-2 rounded-full bg-slate-500';
+                statusText.textContent = 'OFFLINE';
+
+                btnStop.classList.add('opacity-0', 'scale-90', 'pointer-events-none', 'z-0');
+                btnStop.classList.remove('z-10');
+
+                btnStart.classList.remove('opacity-0', 'scale-90', 'pointer-events-none', 'z-0');
+                btnStart.classList.add('z-10');
+            }
+        }
+
+        async function startLiveSession() {
+            if (!currentUser) return;
+
+            showLoading("Memulai sesi live...");
+            try {
+                const startTime = new Date().toISOString();
+                const sessionResult = await fetchFromGas('logStart', {
+                    username: currentUser.username,
+                    nama: currentUser.nama,
+                    waktuMulai: startTime
+                });
+
+                currentSession = {
+                    sessionId: sessionResult.sessionId,
+                    waktuMulai: startTime
+                };
+
+                setLiveUI(true);
+                startTimer(new Date(startTime));
+                showToast('Sesi Live telah dimulai!', 'success');
+            } catch (err) {
+                showToast('Gagal memulai sesi: ' + err.message, 'error');
+            } finally {
+                hideLoading();
+            }
+        }
+
+        function startTimer(startTimeObj) {
+            stopTimer();
+            function update() {
+                const now = new Date();
+                const diffMs = Math.max(0, now - startTimeObj);
+                const hours = Math.floor(diffMs / (1000 * 60 * 60)).toString().padStart(2, '0');
+                const minutes = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60)).toString().padStart(2, '0');
+                const seconds = Math.floor((diffMs % (1000 * 60)) / 1000).toString().padStart(2, '0');
+                document.getElementById('live-timer-display').textContent = `${hours}:${minutes}:${seconds}`;
+            }
+            update();
+            timerInterval = setInterval(update, 1000);
+        }
+
+        function stopTimer() {
+            if (timerInterval) clearInterval(timerInterval);
+            timerInterval = null;
+        }
+
+        function resetTimerDisplay() {
+            document.getElementById('live-timer-display').textContent = '00:00:00';
+        }
+
+        function openEndSessionModal() {
+            const modal = document.getElementById('modal-end-session');
+            modal.classList.remove('hidden');
+            setTimeout(() => modal.classList.remove('translate-y-full'), 10);
+        }
+
+        function closeEndSessionModal() {
+            const modal = document.getElementById('modal-end-session');
+            modal.classList.add('translate-y-full');
+            setTimeout(() => modal.classList.add('hidden'), 300);
+        }
+
+        function formatRupiahInput(input) {
+            let value = input.value.replace(/\D/g, '');
+            if (value) {
+                input.value = parseInt(value, 10).toLocaleString('id-ID');
+            } else {
+                input.value = '';
+            }
+        }
+
+        function parseRupiah(value) {
+            if (!value) return 0;
+            return parseInt(value.replace(/\D/g, ''), 10) || 0;
+        }
+
+        function previewImage(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                const result = e.target.result;
+                selectedImageB64 = result.split(',')[1];
+                document.getElementById('image-preview').src = result;
+                document.getElementById('image-preview-container').classList.remove('hidden');
+                document.getElementById('btn-trigger-camera').classList.add('hidden');
+            };
+            reader.readAsDataURL(file);
+        }
+
+        function clearImage() {
+            document.getElementById('report-image').value = '';
+            selectedImageB64 = null;
+            document.getElementById('image-preview-container').classList.add('hidden');
+            document.getElementById('btn-trigger-camera').classList.remove('hidden');
+        }
+
+        function showUploadOverlay() {
+            const overlay = document.getElementById('upload-progress-overlay');
+            overlay.classList.remove('hidden');
+            setTimeout(() => overlay.classList.remove('opacity-0'), 10);
+        }
+
+        function updateUploadProgress(percent, text) {
+            document.getElementById('upload-progress-bar').style.width = percent + '%';
+            document.getElementById('upload-percent').innerText = percent + '%';
+            if (text) document.getElementById('upload-progress-text').innerText = text;
+        }
+
+        function hideUploadOverlay() {
+            const overlay = document.getElementById('upload-progress-overlay');
+            overlay.classList.add('opacity-0');
+            setTimeout(() => overlay.classList.add('hidden'), 300);
+        }
+
+        async function submitSessionReport() {
+            if (!currentSession) {
+                showToast('Tidak ada sesi aktif untuk diselesaikan!', 'error');
+                return;
+            }
+
+            const shopeeQty = parseInt(document.getElementById('report-shopee-qty').value, 10) || 0;
+            const shopeeGmv = parseRupiah(document.getElementById('report-shopee-gmv').value);
+            const tiktokQty = parseInt(document.getElementById('report-tiktok-qty').value, 10) || 0;
+            const tiktokGmv = parseRupiah(document.getElementById('report-tiktok-gmv').value);
+
+            if (!selectedImageB64) {
+                showToast('Wajib melampirkan screenshot bukti dashboard!', 'error');
+                return;
+            }
+
+            const startTimeObj = new Date(currentSession.waktuMulai);
+            const endTimeObj = new Date();
+            const durasiMenit = Math.round((endTimeObj - startTimeObj) / (1000 * 60));
+
+            showUploadOverlay();
+            updateUploadProgress(20, "Mengunggah data & bukti screenshot ke Google Drive...");
+
+            try {
+                const reportData = {
+                    sessionId: currentSession.sessionId,
+                    username: currentUser.username,
+                    nama: currentUser.nama,
+                    waktuMulai: currentSession.waktuMulai,
+                    waktuSelesai: endTimeObj.toISOString(),
+                    durasiMenit: durasiMenit,
+                    shopeeQty: shopeeQty,
+                    shopeeGmv: shopeeGmv,
+                    tiktokQty: tiktokQty,
+                    tiktokGmv: tiktokGmv,
+                    totalGmv: shopeeGmv + tiktokGmv,
+                    imageB64: selectedImageB64
+                };
+
+                updateUploadProgress(60, "Menyimpan data ke Spreadsheet...");
+                await fetchFromGas('logEnd', reportData);
+
+                updateUploadProgress(100, "Selesai!");
+                setTimeout(() => {
+                    hideUploadOverlay();
+                    closeEndSessionModal();
+                    stopTimer();
+                    currentSession = null;
+                    setLiveUI(false);
+                    resetTimerDisplay();
+                    clearImage();
+                    document.getElementById('report-shopee-qty').value = '';
+                    document.getElementById('report-shopee-gmv').value = '';
+                    document.getElementById('report-tiktok-qty').value = '';
+                    document.getElementById('report-tiktok-gmv').value = '';
+                    showToast('Laporan sesi berhasil dikirim!', 'success');
+                }, 500);
+
+            } catch (err) {
+                hideUploadOverlay();
+                showToast('Gagal mengirim laporan: ' + err.message, 'error');
+            }
+        }
+
+        window.onload = function() {
+            switchView('view-landing');
+        };
+    </script>
+</body>
+</html>
